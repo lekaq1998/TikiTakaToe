@@ -1,0 +1,209 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <script type="text/javascript" src="lib/signalr.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.2.1.js"
+            integrity="sha256-DZAnKJ/6XZ9si04Hgrsxu/8s717jcIzLy3oi35EouyE="
+            crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"
+            integrity="sha256-T0Vest3yCU7pafRw9r+settMBX6JkKN06dqBnpQ8d30="
+            crossorigin="anonymous"></script>
+    <title>TickTackToe</title>
+    <style>
+        #shape {
+            width: 100px;
+            height: 100px;
+            background-color: red;
+            cursor: move;
+        }
+        
+        #board td {
+            width: 60px;
+            height: 60px;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 24px;
+            cursor: pointer;
+            border: 1px solid black;
+        }
+        .grid-container {
+            display: flex;
+            margin-left: 65px;
+        }
+
+        .grid-item {
+            border: none !important;
+            padding: 8px;
+        }
+       .grid-left-team {
+            border: none !important;
+            padding: 8px;
+            margin-top:30px
+        }
+
+        .grid-container2 {
+            display: flex;
+        }
+
+        .leftTeams {
+            display: flex;
+            flex-direction: column;
+        }
+
+    </style>
+</head>
+<body>
+    <input type="button" id="sendmessage" value="Send" />
+
+    <div id="output"></div>
+    <div id="game" style="display: none;">
+        <h2>Game ID: <span id="gameId"></span></h2>
+        <input type="text" id="myInput" />
+        <div class="grid-container">
+            <div class="grid-item">Barcelona</div>
+            <div class="grid-item">Liverpool</div>
+            <div class="grid-item">ManUn</div>
+        </div>
+
+        <div class="grid-container2">
+            <div class="leftTeams">
+                <div class="grid-left-team">RealMadrid</div>
+                <div class="grid-left-team">Bayern</div>
+                <div class="grid-left-team">Dortmund</div>
+            </div>
+            <table id="board">
+
+
+                <tr>
+                    <td onclick="makeMove(0, 0)"></td>
+                    <td onclick="makeMove(0, 1)"></td>
+                    <td onclick="makeMove(0, 2)"></td>
+                </tr>
+                <tr>
+                    <td onclick="makeMove(1, 0)"></td>
+                    <td onclick="makeMove(1, 1)"></td>
+                    <td onclick="makeMove(1, 2)"></td>
+                </tr>
+                <tr>
+                    <td onclick="makeMove(2, 0)"></td>
+                    <td onclick="makeMove(2, 1)"></td>
+                    <td onclick="makeMove(2, 2)"></td>
+                </tr>
+            </table>
+        </div>
+
+
+        <button onclick="leaveGame()">Leave Game</button>
+    </div>
+
+    <script>
+        var challengerId;
+        var connection = new signalR.HubConnectionBuilder()
+            .withUrl('/tickTackToeHub')
+            .build();
+
+        connection.start();
+
+        connection.on('onlinePlayers', function (data) {
+            var table = $('<table>').addClass('table');
+            var header = $('<tr>');
+            var jsonData = JSON.parse(data);
+            console.log(jsonData);
+            for (var key in jsonData[0]) {
+                if (key !== 'Id') { 
+
+                    header.append($('<th>').text(key));
+                }
+            }
+            header.append($('<th>').text('Challenge'));
+
+            table.append(header);
+
+            for (var i = 0; i < jsonData.length; i++) {
+                if (jsonData[i].Id != connection.connection.connectionId) {
+
+                    var row = $('<tr>');
+                    for (var key in jsonData[i]) {
+                        if (key !== 'Id') { 
+
+                            row.append($('<td>').text(jsonData[i][key]));
+                        }
+                    }
+                    if (jsonData[i].Status == "Free") {
+                        var buttonCell = $('<td>');
+                        var button = $('<button>').text('Click Me').attr('id', jsonData[i].Id);
+                        button.on('click', function (event) {
+                            event.preventDefault();
+                            var id = $(this).attr('id'); 
+                            connection.invoke('challenge', id);
+                        });
+                        buttonCell.append(button);
+                        row.append(buttonCell);
+                    }
+                    table.append(row);
+                }
+            }
+            $('#output').html(table);
+        });
+
+        connection.on('startGame', function (id) {
+            gameId = id;
+            $('#gameId').text(gameId);
+            $('#game').show();
+        });
+
+        connection.on('recieveChallenge', function (id, name) {
+            debugger;
+            var answer = confirm("Do you want to play with: " + name);
+            if (answer) {
+                challengerId = id;
+
+                connection.invoke('accept', challengerId);
+            } else {
+                console.log("User clicked No");
+            }
+        });
+
+        connection.on('updateBoard', function (row, col, symbol) {
+            console.log('updateBoard called with:', row, col, symbol);
+            var cell = $('#board').find('tr').eq(row).find('td').eq(col);
+            console.log('Updating cell:', cell); 
+            cell.text(symbol);
+        });
+
+        connection.on('gameEnded', function (result) {
+            alert("Game Ended: " + result);
+            $('#game').hide();
+        });
+
+        var name = prompt('Enter your name:', '');
+
+        document.getElementById('sendmessage').addEventListener('click', function (event) {
+            
+            connection.invoke('send', name);
+
+            
+            event.preventDefault();
+        });
+
+        connection.on("startGame", function () {
+            alert("Play");
+        });
+
+        function makeMove(row, col) {
+            debugger;
+            var input = document.getElementById("myInput");
+            var inputValue = input.value;
+            connection.invoke('makeMove', gameId, row, col, inputValue);
+        }
+
+        function leaveGame() {
+            connection.invoke('leaveGame', gameId);
+            $('#game').hide();
+        }
+
+
+    </script>
+</body>
+</html>
